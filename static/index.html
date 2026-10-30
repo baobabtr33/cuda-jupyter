@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cuda_jupyter_tour - cuda-jupyter</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cellipse cx=%2716%27 cy=%279%27 rx=%2712%27 ry=%274%27 fill=%27none%27 stroke=%27%23F37726%27 stroke-width=%273%27/%3E%3Cellipse cx=%2716%27 cy=%2723%27 rx=%2712%27 ry=%274%27 fill=%27none%27 stroke=%27%23F37726%27 stroke-width=%273%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/vendor/codemirror.min.css">
+<link rel="stylesheet" href="/static/vendor/xterm.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<div id="header">
+  <div id="header-container">
+    <a id="logo" href="#" title="Notebook home">
+      <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <ellipse cx="16" cy="9" rx="12" ry="4.2" fill="none" stroke="#F37726" stroke-width="2.6" transform="rotate(0 16 9)"/>
+        <ellipse cx="16" cy="23" rx="12" ry="4.2" fill="none" stroke="#F37726" stroke-width="2.6"/>
+        <circle cx="16" cy="16" r="2.4" fill="#767677"/>
+      </svg>
+      <span>jupyter</span>
+    </a>
+    <span id="notebook_name" title="Notebook file">cuda_jupyter_tour</span>
+    <span id="checkpoint_status">Last Checkpoint: never</span>
+    <span id="autosave_status"></span>
+    <span class="flex-spacer"></span>
+    <span id="env_info"></span>
+  </div>
+</div>
+
+<div id="menubar-container">
+  <div id="menubar">
+    <ul id="menus">
+      <li class="menu" data-menu="file">File
+        <ul class="dropdown">
+          <li data-cmd="save">Save and Checkpoint<kbd>Ctrl-S</kbd></li>
+          <li data-cmd="download-ipynb">Download as Notebook (.ipynb)</li>
+          <li data-cmd="download-cu">Download CUDA of selected cell (.cu)</li>
+          <li class="divider"></li>
+          <li data-cmd="revert">Revert to Example Notebook</li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="edit">Edit
+        <ul class="dropdown">
+          <li data-cmd="cut">Cut Cells<kbd>X</kbd></li>
+          <li data-cmd="copy">Copy Cells<kbd>C</kbd></li>
+          <li data-cmd="paste">Paste Cells Below<kbd>V</kbd></li>
+          <li data-cmd="delete">Delete Cells<kbd>D,D</kbd></li>
+          <li class="divider"></li>
+          <li data-cmd="move-up">Move Cell Up</li>
+          <li data-cmd="move-down">Move Cell Down</li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="view">View
+        <ul class="dropdown">
+          <li data-cmd="toggle-cuda">Toggle CUDA Pane</li>
+          <li data-cmd="toggle-terminal">Toggle Terminal<kbd>Ctrl-`</kbd></li>
+          <li data-cmd="toggle-lines">Toggle Line Numbers<kbd>L</kbd></li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="insert">Insert
+        <ul class="dropdown">
+          <li data-cmd="insert-above">Insert Cell Above<kbd>A</kbd></li>
+          <li data-cmd="insert-below">Insert Cell Below<kbd>B</kbd></li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="cell">Cell
+        <ul class="dropdown">
+          <li data-cmd="run">Run Cells<kbd>Ctrl-Enter</kbd></li>
+          <li data-cmd="run-advance">Run Cells and Select Below<kbd>Shift-Enter</kbd></li>
+          <li data-cmd="run-insert">Run Cells and Insert Below<kbd>Alt-Enter</kbd></li>
+          <li data-cmd="run-all">Run All</li>
+          <li data-cmd="run-above">Run All Above</li>
+          <li data-cmd="run-below">Run All Below</li>
+          <li class="divider"></li>
+          <li data-cmd="to-code">Cell Type: Code<kbd>Y</kbd></li>
+          <li data-cmd="to-markdown">Cell Type: Markdown<kbd>M</kbd></li>
+          <li class="divider"></li>
+          <li data-cmd="clear-output">Clear Current Output</li>
+          <li data-cmd="clear-all">Clear All Output</li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="kernel">Kernel
+        <ul class="dropdown">
+          <li data-cmd="restart">Restart<kbd>0,0</kbd></li>
+          <li data-cmd="restart-clear">Restart &amp; Clear Output</li>
+          <li data-cmd="restart-run">Restart &amp; Run All</li>
+        </ul>
+      </li>
+      <li class="menu" data-menu="help">Help
+        <ul class="dropdown">
+          <li data-cmd="shortcuts">Keyboard Shortcuts<kbd>H</kbd></li>
+          <li data-cmd="about">About</li>
+        </ul>
+      </li>
+    </ul>
+    <span class="flex-spacer"></span>
+    <span id="notification_area"></span>
+    <span id="trusted">Trusted</span>
+    <span id="kernel_indicator" title="Kernel idle">
+      <span id="kernel_name">Python 3 (CUDA)</span>
+      <span id="kernel_dot"></span>
+    </span>
+  </div>
+
+  <div id="toolbar">
+    <button class="btn" data-cmd="save" title="Save and Checkpoint">
+      <svg viewBox="0 0 16 16"><path d="M2 2h9l3 3v9H2z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 2v4h5V2M5 14v-4h6v4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <span class="btn-group">
+      <button class="btn" data-cmd="insert-below" title="Insert cell below">
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+    </span>
+    <span class="btn-group">
+      <button class="btn" data-cmd="cut" title="Cut selected cells">
+        <svg viewBox="0 0 16 16"><circle cx="4.5" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.8 10.5L12 2M10.2 10.5L4 2" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+      <button class="btn" data-cmd="copy" title="Copy selected cells">
+        <svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3 11V2h7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      </button>
+      <button class="btn" data-cmd="paste" title="Paste cells below">
+        <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="11" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="6" y="1.5" width="4" height="3" fill="currentColor"/></svg>
+      </button>
+    </span>
+    <span class="btn-group">
+      <button class="btn" data-cmd="move-up" title="Move selected cells up">
+        <svg viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+      <button class="btn" data-cmd="move-down" title="Move selected cells down">
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+    </span>
+    <span class="btn-group">
+      <button class="btn btn-label" data-cmd="run-advance" title="Run">
+        <svg viewBox="0 0 16 16"><path d="M2 3h2v10H2zM6 3l8 5-8 5z" fill="currentColor"/></svg>
+        <span>Run</span>
+      </button>
+      <button class="btn" data-cmd="interrupt" title="Interrupt the kernel (not supported)" disabled>
+        <svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor"/></svg>
+      </button>
+      <button class="btn" data-cmd="restart" title="Restart the kernel">
+        <svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12.5 1.5v3.5H9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      </button>
+      <button class="btn" data-cmd="restart-run" title="Restart the kernel, then re-run the whole notebook">
+        <svg viewBox="0 0 16 16"><path d="M1 3l6 5-6 5zM8 3l6 5-6 5z" fill="currentColor"/></svg>
+      </button>
+    </span>
+    <select id="cell_type" title="Cell type">
+      <option value="code">Code</option>
+      <option value="markdown">Markdown</option>
+    </select>
+    <span class="btn-group">
+      <button class="btn btn-label" data-cmd="toggle-cuda" title="Toggle CUDA pane">
+        <span class="cuda-chip">CUDA</span>
+      </button>
+      <button class="btn btn-label" data-cmd="toggle-terminal" title="Toggle terminal">
+        <svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 6l2.5 2L4 10M8 10.5h4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
+    </span>
+  </div>
+</div>
+
+<div id="main">
+  <div id="workspace">
+    <div id="notebook" tabindex="-1">
+      <div id="notebook-container"></div>
+      <div id="notebook-end" title="Click to add a cell"></div>
+    </div>
+
+    <div id="vsplit" class="splitter" title="Drag to resize"></div>
+
+    <section id="cuda-pane" aria-label="CUDA translation">
+      <div class="pane-tabs">
+        <span id="cuda-files"></span>
+        <button class="pane-tab" id="trace-tab" data-tab="trace" hidden>Op trace</button>
+        <span class="flex-spacer"></span>
+        <button class="pane-btn" id="cuda-copy" title="Copy CUDA source">Copy</button>
+        <button class="pane-btn" id="cuda-download" title="Download .cu">Download</button>
+      </div>
+      <div id="cuda-subheader">
+        <span id="cuda-cell-label">no cell run yet</span>
+        <span id="cuda-stats"></span>
+      </div>
+      <div id="cuda-body">
+        <div id="cuda-empty" class="pane-empty">
+          <div class="empty-mark">&lt;&lt;&lt; &gt;&gt;&gt;</div>
+          <p>Run a code cell (<kbd>Shift</kbd> + <kbd>Enter</kbd>).</p>
+          <p class="muted">PyTorch, JAX and TensorFlow ops are traced and translated into CUDA C++; Numba, Triton and CuPy kernels show the PTX / CUDA they compiled to.</p>
+        </div>
+        <div id="cuda-code" class="code-view" hidden></div>
+        <div id="cuda-trace" hidden></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="hsplit" class="splitter" title="Drag to resize"></div>
+
+  <section id="terminal-pane" aria-label="Terminal">
+    <div class="pane-tabs">
+      <button class="pane-tab active"><span class="term-icon">&gt;_</span>Terminal</button>
+      <span id="term-title" class="muted"></span>
+      <span class="flex-spacer"></span>
+      <button class="pane-btn" id="term-clear" title="Clear terminal">Clear</button>
+      <button class="pane-btn" id="term-restart" title="Start a new shell">New shell</button>
+      <button class="pane-btn" id="term-hide" title="Hide terminal">&#x2715;</button>
+    </div>
+    <div id="terminal"></div>
+  </section>
+</div>
+
+<div id="modal" hidden>
+  <div class="modal-dialog">
+    <div class="modal-header"><span id="modal-title"></span><button id="modal-close">&#x2715;</button></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="/static/vendor/codemirror.min.js"></script>
+<script src="/static/vendor/cm-python.min.js"></script>
+<script src="/static/vendor/cm-markdown.min.js"></script>
+<script src="/static/vendor/cm-matchbrackets.min.js"></script>
+<script src="/static/vendor/cm-closebrackets.min.js"></script>
+<script src="/static/vendor/highlight.min.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/xterm.js"></script>
+<script src="/static/vendor/xterm-addon-fit.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

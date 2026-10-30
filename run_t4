@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Run cuda-jupyter on a Google Colab T4 GPU and forward it to localhost.
+#
+#   ./run_t4                 # http://localhost:8888 (next free port if taken)
+#
+# Uses the Colab session named `t4` (the same one as `colab ssh -s t4`), creating
+# it with a T4 if it does not exist yet. Colab allows one SSH connection per
+# runtime, so while this runs `colab ssh -s t4` cannot connect; use the in-page
+# terminal instead. If the connection drops, the script reconnects (the server
+# keeps running on the VM). Ctrl-C stops the remote server and copies
+# notebook.ipynb back.
+#
+# Overrides: SESSION, GPU, KEY, LOCAL_PORT, REMOTE_PORT, REMOTE_DIR, NO_OPEN=1.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+SESSION="${SESSION:-t4}"
+GPU="${GPU:-T4}"
+KEY="${KEY:-$HOME/.ssh/id_ed25519}"
+REMOTE_PORT="${REMOTE_PORT:-8888}"
+LOCAL_PORT="${LOCAL_PORT:-8888}"
+REMOTE_DIR="${REMOTE_DIR:-/content/cuda-jupyter}"
+
+command -v colab >/dev/null || { echo "colab CLI not found (uv tool install google-colab-cli)" >&2; exit 1; }
+
+port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+while port_busy "$LOCAL_PORT"; do LOCAL_PORT=$((LOCAL_PORT + 1)); done
+
+CONTROL="${TMPDIR:-/tmp}/run_t4-${SESSION}.sock"
+HOST="root@colab-$SESSION"
+BASE=(ssh -i "$KEY"
+  -o "ProxyCommand=colab ssh --proxy-mode -s $SESSION --gpu $GPU -i $KEY"
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+# Every command and the port forward share one multiplexed master connection.
+MUX=(-o ControlMaster=auto -o "ControlPath=$CONTROL" -o ControlPersist=yes)
+remote() { "${BASE[@]}" "${MUX[@]}" "$HOST" "$@"; }
+connected() { ssh -o "ControlPath=$CONTROL" -O check "$HOST" 2>/dev/null; }
+server_up() { remote "curl -sf http://127.0.0.1:$REMOTE_PORT/api/info >/dev/null"; }
+
+start_server() {
+  echo "==> starting server on the VM (port $REMOTE_PORT)"
+  remote "cd '$REMOTE_DIR' || exit 1
+    [ -f server.pid ] && kill \$(cat server.pid) 2>/dev/null && sleep 1
+    PORT=$REMOTE_PORT SHELL=/bin/bash setsid nohup python3 server.py > server.log 2>&1 < /dev/null &
+    echo \$! > server.pid"
+  for _ in $(seq 1 60); do server_up && return 0; sleep 1; done
+  echo "server failed to start:" >&2
+  remote "tail -30 '$REMOTE_DIR/server.log'" >&2
+  return 1
+}
+
+echo "==> connecting to Colab session '$SESSION' ($GPU)..."
+remote 'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader' | sed 's/^/    gpu: /'
+
+echo "==> uploading project to $REMOTE_DIR"
+COPYFILE_DISABLE=1 tar czf - --no-mac-metadata --no-xattrs --exclude .venv --exclude .git \
+    --exclude __pycache__ --exclude '*.log' --exclude docs . \
+  | remote "mkdir -p '$REMOTE_DIR' && tar xzf - -C '$REMOTE_DIR'"
+
+echo "==> installing missing packages"
+remote "python3 -c 'import fastapi, uvicorn, websockets, numpy' 2>/dev/null \
+  || pip install -q fastapi 'uvicorn[standard]' numpy"
+
+start_server
+
+cleanup() {
+  trap - INT TERM EXIT
+  echo
+  echo "==> stopping remote server, copying notebook.ipynb back"
+  if remote "cat '$REMOTE_DIR/notebook.ipynb' 2>/dev/null" > notebook.ipynb.part && [ -s notebook.ipynb.part ]; then
+    mv notebook.ipynb.part notebook.ipynb
+  else
+    rm -f notebook.ipynb.part
+  fi
+  remote "kill \$(cat '$REMOTE_DIR/server.pid') 2>/dev/null; rm -f '$REMOTE_DIR/server.pid'" || true
+  ssh -o "ControlPath=$CONTROL" -O exit "$HOST" 2>/dev/null || true
+}
+trap cleanup INT TERM EXIT
+
+URL="http://localhost:$LOCAL_PORT"
+opened=""
+while true; do
+  if ! remote true 2>/dev/null; then
+    echo "    could not reach Colab, retrying in 5s..." >&2
+    sleep 5
+    continue
+  fi
+  server_up || start_server || exit 1
+  "${BASE[@]}" "${MUX[@]}" -O forward -L "127.0.0.1:$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" "$HOST" >/dev/null
+  echo "==> forwarding $URL -> colab:$REMOTE_PORT   (Ctrl-C to stop)"
+  if [ -z "$opened" ] && [ -z "${NO_OPEN:-}" ] && command -v open >/dev/null; then open "$URL"; fi
+  opened=1
+  while connected; do sleep 5; done
+  echo "==> connection to Colab dropped, reconnecting (the server keeps running on the VM)..." >&2
+  sleep 2
+done
