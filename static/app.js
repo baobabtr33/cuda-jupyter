@@ -608,6 +608,8 @@
   function applyTab() {
     document.querySelectorAll("#cuda-pane .pane-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === String(nb.cudaTab)));
     if (!nb.cudaCell) return;
+    cudaEmpty.hidden = true;
+    cudaEmpty.classList.remove("tracing");
     cudaCode.hidden = VIEW_TABS.includes(nb.cudaTab);
     cudaTrace.hidden = nb.cudaTab !== "trace";
     cudaGpu.hidden = nb.cudaTab !== "gpu";

@@ -244,7 +244,8 @@ async def restart():
 
 
 def log(msg):
-    print(time.strftime("%H:%M:%S"), msg, file=sys.stderr, flush=True)
+    # sys.__stderr__: cells redirect sys.stderr while they run, and this is called from other threads
+    print(time.strftime("%H:%M:%S"), msg, file=sys.__stderr__, flush=True)
 
 
 def login_shell():
