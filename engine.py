@@ -14,6 +14,7 @@ import linecache
 import os
 import sys
 import threading
+import time
 import traceback
 
 # Let PyTorch, JAX and TensorFlow share one GPU instead of each grabbing it all.
@@ -339,6 +340,7 @@ class Engine:
             stdout, stderr = io.StringIO(), io.StringIO()
             rec = Recorder(filename)
             result, error = None, None
+            t_start = time.perf_counter()
             try:
                 tree = ast.parse(source, filename)
                 last = None
@@ -365,6 +367,7 @@ class Engine:
             finally:
                 frameworks.ACTIVE = None
 
+            t_ran = time.perf_counter()
             cuda = None
             if rec.events or rec.files:
                 names, modules = self._python_names(rec)
@@ -385,6 +388,7 @@ class Engine:
                 "result": result,
                 "error": error,
                 "cuda": cuda,
+                "timing": {"run": round(t_ran - t_start, 3), "translate": round(time.perf_counter() - t_ran, 3)},
             }
 
     @staticmethod

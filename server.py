@@ -164,7 +164,9 @@ async def resources(request: Request):
     key = hashlib.sha1(f"{arch}\0{code}".encode()).hexdigest()
     async with _nvcc_lock:
         if key not in _resource_cache:
+            t0 = time.time()
             _resource_cache[key] = await asyncio.to_thread(nvcc_resources, code, arch)
+            log(f"nvcc --resource-usage: {time.time() - t0:.2f}s")
     return _resource_cache[key]
 
 
@@ -203,7 +205,7 @@ async def execute(request: Request):
         del jobs[k]
     if job_id not in jobs:
         loop = asyncio.get_running_loop()
-        job = {"done_at": None, "result": None, "event": asyncio.Event()}
+        job = {"done_at": None, "result": None, "event": asyncio.Event(), "queued_at": now}
         jobs[job_id] = job
 
         def finished(fut):
@@ -213,6 +215,9 @@ async def execute(request: Request):
                 job["result"] = {"error": {"ename": type(e).__name__, "evalue": str(e),
                                            "traceback": [f"{type(e).__name__}: {e}\n"]}}
             job["done_at"] = time.time()
+            tm = (job["result"] or {}).get("timing", {})
+            log(f"job {job_id[:8]}: {job['done_at'] - job['queued_at']:.2f}s submit-to-result "
+                f"(run {tm.get('run', '?')}s, translate {tm.get('translate', '?')}s)")
             loop.call_soon_threadsafe(job["event"].set)
 
         executor.submit(engine.run, body.get("code", "")).add_done_callback(finished)
@@ -236,6 +241,10 @@ async def restart():
     # Queued behind any running cell, like a kernel restart after the current cell.
     await asyncio.wrap_future(executor.submit(engine.reset))
     return {"ok": True}
+
+
+def log(msg):
+    print(time.strftime("%H:%M:%S"), msg, file=sys.stderr, flush=True)
 
 
 def login_shell():

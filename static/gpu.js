@@ -88,7 +88,9 @@
       st(cuda).wave = 0;
     }
     maybeFetchRegs(cuda, gpu, opts);
-    root.append(deviceCard(gpu), launchList(cuda, gpu));
+    root.append(deviceCard(gpu));
+    if (st(cuda).res?.pending) root.append(working("compiling with nvcc --resource-usage for exact register counts", st(cuda).res.t0));
+    root.append(launchList(cuda, gpu));
     const launch = launches[st(cuda).sel];
     const r = regsFor(launch, cuda);
     const smem = Math.max(launch.smem || 0, r.smem || 0);
@@ -108,7 +110,7 @@
     if (st(cuda).res || !opts.nvcc) return;
     const file = cuda.files.find((f) => f.lang === "cpp" && (cuda.launches || []).some((l) => l.file === f.name && !l.regs));
     if (!file) return;
-    st(cuda).res = { pending: true };
+    st(cuda).res = { pending: true, t0: performance.now() };
     try {
       const res = await fetch("/api/resources", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -119,6 +121,22 @@
       st(cuda).res = { error: String(e) };
     }
     if (view?.cuda === cuda) rerender();
+  }
+
+  // Animated "still working" line with a live elapsed time.
+  function working(text, t0) {
+    const box = el("div", "gpu-working");
+    const mark = el("span", "empty-mark working");
+    [..."<<<>>>"].forEach((c, i) => { const sp = el("span", null, c); sp.style.setProperty("--i", i); mark.append(sp); });
+    const secs = el("span", "muted", "");
+    box.append(mark, el("span", null, text), secs);
+    const tickElapsed = () => {
+      if (!box.isConnected && secs.textContent) return;
+      secs.textContent = `${((performance.now() - t0) / 1000).toFixed(1)}s`;
+      setTimeout(tickElapsed, 100);
+    };
+    tickElapsed();
+    return box;
   }
 
   // ------------------------------------------------------------------ sections
@@ -334,7 +352,7 @@
 
     const th = el("div", "gpu-thread");
     th.append(el("div", "gpu-thread-title", `One thread owns ${r.regs} registers` +
-      (r.src === "estimate" ? " (estimated)" : r.src ? ` (${r.src})` : "")));
+      (r.src === "estimate" ? (st(cuda).res?.pending ? " (estimated, nvcc running...)" : " (estimated)") : r.src ? ` (${r.src})` : "")));
     const cells = el("div", "reg-cells");
     for (let i = 0; i < Math.min(r.regs, 64); i++) cells.append(el("i", null, ""));
     if (r.regs > 64) cells.append(el("span", "muted", ` +${r.regs - 64}`));

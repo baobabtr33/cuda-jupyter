@@ -417,12 +417,34 @@
     cudaGpu.hidden = true;
     cudaEmpty.hidden = false;
     cudaEmpty.classList.add("tracing");
-    cudaEmpty.innerHTML = '<div class="empty-mark">&lt;&lt;&lt; &gt;&gt;&gt;</div><p>Running PyTorch and tracing ATen ops...</p>';
+    const chevrons = [..."<<<>>>"].map((c, i) => `<span style="--i:${i}">${c === "<" ? "&lt;" : "&gt;"}</span>`);
+    cudaEmpty.innerHTML = `<div class="empty-mark working">${chevrons.slice(0, 3).join("")} ${chevrons.slice(3).join("")}</div>` +
+      '<p>Running the cell and tracing its GPU ops...</p><p class="elapsed" id="trace-elapsed">0.0s</p>';
     $("#cuda-cell-label").textContent = `cell #${indexOf(cell) + 1} · running`;
     $("#cuda-stats").innerHTML = "";
+    startElapsed(cell);
+  }
+
+  // Elapsed-time readout while a cell runs, in the CUDA pane and on the cell's badge.
+  let elapsedTimer = null;
+  function startElapsed(cell) {
+    stopElapsed();
+    const t0 = performance.now();
+    elapsedTimer = setInterval(() => {
+      const secs = (performance.now() - t0) / 1000;
+      const out = $("#trace-elapsed");
+      if (out) out.textContent = `${secs.toFixed(1)}s`;
+      const badge = cell.inner.querySelector(".cuda-badge.running");
+      if (badge) badge.textContent = `tracing · ${secs.toFixed(0)}s`;
+    }, 100);
+  }
+  function stopElapsed() {
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    elapsedTimer = null;
   }
 
   function showCuda(cell, animate) {
+    stopElapsed();
     nb.tracingCell = null;
     nb.cudaCell = cell && cell.cuda ? cell : null;
     nb.cells.forEach(renderBadge);

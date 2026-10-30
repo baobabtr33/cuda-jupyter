@@ -592,3 +592,19 @@ body.no-terminal #terminal-pane, body.no-terminal #hsplit { display: none; }
 .gpu-occ tr.limit td:first-child::before { content: "▸ "; }
 @media (prefers-reduced-motion: reduce) { .sm-slots i, .sm-tile { transition: none; } }
 @container (max-width: 620px) { .gpu-sm { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* "working" animation: a bright sweep across <<< >>> */
+.pane-empty .empty-mark.working { animation: none; color: #3d4a2a; }
+.empty-mark.working span { display: inline-block; animation: chev 1.1s ease-in-out infinite; animation-delay: calc(var(--i) * 0.11s); }
+@keyframes chev {
+  0%, 60%, 100% { color: #3d4a2a; text-shadow: none; transform: none; }
+  25% { color: #b6ff3b; text-shadow: 0 0 10px rgba(182, 255, 59, 0.8); transform: translateY(-2px); }
+}
+.pane-empty .elapsed { font: 12px var(--mono); color: #b6ff3b; }
+.cuda-badge.running { border-color: var(--accent); color: #4a7a00; animation: badge-pulse 1.1s ease-in-out infinite; }
+@keyframes badge-pulse { 50% { background: #eaf5d6; box-shadow: 0 0 0 3px rgba(118, 185, 0, 0.25); } }
+.gpu-working { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; padding: 5px 10px; border: 1px solid rgba(182, 255, 59, 0.35); border-radius: 4px; color: #b6ff3b; font: 11.5px var(--mono); }
+.gpu-working .empty-mark { font-size: 13px; margin: 0; letter-spacing: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  .empty-mark.working span, .cuda-badge.running { animation-duration: 3s; }
+}
