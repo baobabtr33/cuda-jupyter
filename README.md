@@ -1,31 +1,47 @@
 # cuda-jupyter
 
-A Jupyter-style notebook that shows, next to every cell, the CUDA its Python code turns into.
+**A Jupyter-style notebook that shows you the CUDA behind every cell, and what the GPU does with it.**
 
-Run a PyTorch, JAX or TensorFlow cell and a CUDA C++ file for that cell appears on the right: kernels, launch
-configurations and host code for the exact shapes, dtypes and strides the cell used. Run a Numba, Triton or CuPy
-kernel and you see the real PTX or CUDA source the compiler produced. A shell sits underneath, so you can `nvcc` the
-generated file right away.
+Write PyTorch, JAX or TensorFlow as usual. When a cell runs, the pane on the right fills in with the CUDA C++ that
+cell corresponds to: the kernels, launch configurations, `cudaMalloc`s and copies, for the exact shapes, dtypes and
+strides it used. Write a Numba, Triton or CuPy kernel and you see the real PTX or CUDA source its compiler produced.
+The **GPU** tab then plays the launch out on the actual device: blocks dealt to SMs in waves, warps on the
+schedulers, cores, registers and shared memory. A terminal underneath lets you `nvcc` the generated file straight
+away.
 
 ![PyTorch training loop and its CUDA](docs/screenshots/pytorch-training.png)
 
-## Features
+## Watch a kernel run on the GPU
 
-- **Notebook** (left): classic Jupyter look and keyboard model (Shift+Enter, A/B, D,D, M/Y, Esc/Enter, Ctrl+S).
-  Code and Markdown cells, saved as `notebook.ipynb`.
-- **CUDA pane** (right): appears after a cell runs, with one tab per generated file (`cellN.cu`, `*.ptx`, `*.cu`) and
-  an *Op trace* tab listing every recorded op. Hover a CUDA line to highlight the Python line that produced it; click
-  to jump there. Moving the cursor in a cell highlights its CUDA. Copy or download any file.
-- **GPU tab**: what a kernel launch does on the actual device. The grid is dealt to the SMs in waves (idle SMs and
-  tail effects show up), then one SM is opened up: warp schedulers with the resident warps of each block, FP32/INT32
-  cores and tensor cores, register file and shared memory usage, the registers one thread owns, and an occupancy
-  breakdown showing which resource limits blocks per SM. Register counts come from `ptxas` (via `nvcc`), Numba or
-  Triton; without a GPU a Tesla T4 is shown with estimated counts.
-- **Terminal** (bottom): a real shell (`$SHELL`), with the virtualenv and `nvcc` on `PATH`.
+Pick any launch in the GPU tab and press **Play**.
 
-| Framework | What the pane shows |
+**1. The grid is split into blocks, and blocks go to SMs.** Each tile is one SM on the device and each square is a
+block resident on it. Waves advance until the grid is done. Small launches that leave SMs idle, and a short last wave
+(the tail effect), stand out immediately.
+
+![Blocks dealt to the 40 SMs of a T4, wave by wave](docs/screenshots/gpu-waves.gif)
+
+**2. Inside one SM.** Each block is cut into warps of 32 threads and spread over the SM's warp schedulers. Every
+cycle, each scheduler picks a ready warp (highlighted) and issues its next instruction to its FP32 cores. Bars show how
+much of the register file and shared memory the resident blocks use, and a row of cells shows the registers one
+thread owns.
+
+![Warp schedulers issuing warps inside SM 0](docs/screenshots/gpu-sm.gif)
+
+**3. Occupancy.** How many blocks fit on an SM at once, limited by warp slots, registers, shared memory or block
+slots, with the binding limit highlighted.
+
+![Occupancy breakdown](docs/screenshots/gpu-occupancy.png)
+
+The numbers come from the real device (`torch.cuda.get_device_properties` plus a per-architecture table covering
+Pascal to Blackwell) and the real kernels: register counts are reported by `ptxas` (compiled on demand with
+`nvcc --resource-usage`), by Numba or by Triton. With no GPU, a Tesla T4 is shown and register counts are estimated.
+
+## Every framework
+
+| Framework | What the CUDA pane shows |
 |---|---|
-| PyTorch | `cellN.cu` translated from the ATen ops (forward, autograd backward, optimizer steps) |
+| PyTorch | `cellN.cu` translated from the ATen ops: forward, autograd backward, optimizer steps |
 | JAX | `cellN.cu` translated from the `jax.lax` primitives (`jax.jit` functions are traced op by op) |
 | TensorFlow / Keras | `cellN.cu` translated from the eager TF ops (`tf.function` runs eagerly while tracing) |
 | Numba (`@cuda.jit`) | the PTX Numba compiled, with the kernel's Python source as a header |
@@ -40,7 +56,18 @@ generated file right away.
 |---|---|
 | ![Numba PTX](docs/screenshots/numba-ptx.png) | ![TensorFlow op trace](docs/screenshots/tensorflow-trace.png) |
 
-![GPU tab: inside one SM](docs/screenshots/gpu-sm.png)
+## Features
+
+- **Notebook** (left): classic Jupyter look and keyboard model (Shift+Enter, A/B, D,D, M/Y, Esc/Enter, Ctrl+S), code
+  and Markdown cells, saved as `notebook.ipynb`.
+- **CUDA pane** (right): one tab per generated file (`cellN.cu`, `*.ptx`, `*.cu`), plus the **GPU** tab and an
+  **Op trace** tab listing every recorded op. Hover a CUDA line to highlight the Python line that produced it; click
+  to jump there. Moving the cursor in a cell highlights its CUDA. Copy or download any file.
+- **Terminal** (bottom): a real shell (`$SHELL`) with the virtualenv and `nvcc` on `PATH`.
+- **Long-running cells** show a live timer; cells run as server-side jobs, so a slow cell or a dropped connection
+  doesn't lose the result.
+
+![GPU tab: grid of SMs and kernel launches](docs/screenshots/gpu-grid.png)
 
 ## Quick start
 
@@ -51,44 +78,40 @@ generated file right away.
 # open http://127.0.0.1:8888
 ```
 
-Tracing works without a GPU (cells run on CPU and the CUDA is still generated). Only PyTorch is installed by default;
-`pip install jax tensorflow` etc. into `.venv` to try the other frameworks. Numba, Triton and CuPy need an NVIDIA GPU.
+No GPU needed: cells run on CPU and the CUDA is still generated (the GPU tab shows a Tesla T4). Only PyTorch is
+installed by default; `pip install jax tensorflow` into `.venv` to try those. Numba, Triton and CuPy need an NVIDIA
+GPU. The first launch opens `examples/cuda_jupyter_tour.ipynb`, a tour of every framework.
 
-The first launch opens `examples/cuda_jupyter_tour.ipynb`, a tour of every framework.
-
-### On a Colab T4 GPU
+### On a free Colab T4
 
 ```sh
 ./run_t4          # opens http://localhost:8888, served from a Colab T4
 ```
 
-Requires the [`colab` CLI](https://pypi.org/project/google-colab-cli/) and an SSH key it can use. The script connects
-to the Colab session `t4` (creating it with a T4 if needed), uploads the project to `/content/cuda-jupyter`, starts the
-server and forwards it to localhost. Cells then run on real CUDA, and the terminal is a bash shell on the VM where
-`nvcc -O3 -arch=sm_75 cellN.cu` builds the generated code. Colab images already include PyTorch, JAX, TensorFlow,
-Numba, Triton and CuPy.
+Requires the `colab` CLI (`uv tool install google-colab-cli`) and an SSH key it can use. The script connects to the
+Colab session `t4` (creating it with a T4 if needed), uploads the project to `/content/cuda-jupyter`, starts the server
+and forwards it to localhost. Cells then run on real CUDA, the GPU tab shows real `ptxas` register counts, and the
+terminal is a bash shell on the VM where `nvcc -O3 -arch=sm_75 cellN.cu` builds the generated code. Colab images
+already include PyTorch, JAX, TensorFlow, Numba, Triton and CuPy.
 
 If the connection drops, `run_t4` reconnects (the server and kernel state survive on the VM). Ctrl-C stops the remote
 server and copies `notebook.ipynb` back.
 
-Options: `SESSION=`, `GPU=`, `KEY=`, `LOCAL_PORT=`, `REMOTE_PORT=`, `REMOTE_DIR=`, `NO_OPEN=1`.
-Colab allows one SSH connection per runtime, so `colab ssh` to the same session can't connect while `run_t4` runs;
-use the in-page terminal instead.
+Options: `SESSION=`, `GPU=`, `KEY=`, `LOCAL_PORT=`, `REMOTE_PORT=`, `REMOTE_DIR=`, `NO_OPEN=1`. Colab allows one SSH
+connection per runtime, so `colab ssh` to the same session can't connect while `run_t4` runs; use the in-page
+terminal instead.
 
 ## How it works
 
-- `server.py`: FastAPI app. Serves the UI, runs cells as jobs on a single worker (one kernel, cells in order; the
-  browser long-polls for results and retries across dropped connections), and exposes a pty shell over a WebSocket.
-- `engine.py`: runs each cell in a persistent namespace. PyTorch ops are recorded by a `TorchDispatchMode` (arguments,
-  shapes, strides, storages, cell line, enclosing `nn.Module`, autograd node). Tensors are named after the Python
-  variables, module parameters and optimizer state that hold them.
-- `frameworks.py`: hooks for the other frameworks, installed when they are imported. JAX `Primitive.bind` and
-  TensorFlow op callbacks are mapped onto the same op events as ATen; Numba, Triton and CuPy compile hooks capture
-  the generated PTX/CUDA and map it back to cell lines via debug info.
-- `static/gpu.js`: the GPU tab. Device limits come from `torch.cuda.get_device_properties` plus a per-architecture
-  table (cores and schedulers per SM); occupancy follows NVIDIA's calculator (register allocation per warp, shared
-  memory granularity, block and warp slots).
-- `cudagen.py`: turns the op trace into a `.cu` file from hand-written templates:
+| File | Role |
+|---|---|
+| `server.py` | FastAPI app: serves the UI, runs cells as jobs on a single worker (one kernel, cells in order), reports device limits, runs `nvcc --resource-usage` for register counts, and exposes a pty shell over a WebSocket |
+| `engine.py` | runs each cell in a persistent namespace; PyTorch ops are recorded by a `TorchDispatchMode` (arguments, shapes, strides, storages, cell line, enclosing `nn.Module`, autograd node), and tensors are named after the Python variables, parameters and optimizer state that hold them |
+| `frameworks.py` | hooks for the other frameworks, installed when they are imported: JAX `Primitive.bind` and TensorFlow op callbacks become the same op events as ATen; Numba, Triton and CuPy compile hooks capture the generated PTX/CUDA and launch configuration |
+| `cudagen.py` | turns the op trace into a `.cu` file from hand-written templates, plus a structured record of every kernel launch |
+| `static/gpu.js` | the GPU tab: wave scheduling, the SM view and the occupancy calculation (register allocation per warp, shared memory granularity, warp and block slots) |
+
+Templates used by `cudagen.py`:
 
 | Ops | CUDA |
 |---|---|
@@ -107,10 +130,10 @@ first iteration's buffers. The generated files compile with `nvcc`.
 
 - The `.cu` translation is illustrative. It shows what the GPU work for a cell looks like, not what the framework
   actually runs (cuBLAS/cuDNN, XLA fusions, vectorised kernels). Numerical equivalence is not guaranteed.
+- The GPU tab is a model: blocks are dealt round-robin in fixed waves, while real hardware hands out blocks as
+  others finish. CuPy launches are not shown there.
 - JAX and TensorFlow are traced eagerly (`jax.disable_jit`, `tf.config.run_functions_eagerly`), so cells run slower
   and you see unfused ops.
-- The GPU tab is a model: blocks are dealt round-robin in fixed waves, while real hardware schedules blocks
-  dynamically. CuPy launches are not shown there.
 - CuPy caches compiled kernels, so only kernels compiled during a cell are shown.
 - No interrupt button (restart the server to stop a runaway cell); outputs are text only (no plots).
 
