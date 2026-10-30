@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Create and use a Google Colab GPU runtime from the terminal (no notebook).
+#
+#   ./colab_t4                # create the runtime if needed, then open a shell on it
+#   ./colab_t4 new            # create the runtime (if needed) and show its GPU
+#   ./colab_t4 ssh [CMD...]   # shell on the runtime, or run CMD there
+#   ./colab_t4 status         # session status, GPU and compute-unit balance
+#   ./colab_t4 stop           # stop the runtime (asks first)
+#
+# Uses the same Colab session as ./run_t4 (`t4` by default) and shares its SSH
+# connection, so both work at the same time even though Colab allows only one
+# SSH connection per runtime.
+#
+# Overrides: SESSION (default t4), GPU (T4, L4, G4, A100, H100, or none for a
+# CPU runtime), KEY (default ~/.ssh/id_ed25519).
+set -euo pipefail
+
+SESSION="${SESSION:-t4}"
+GPU="${GPU:-T4}"
+KEY="${KEY:-$HOME/.ssh/id_ed25519}"
+
+command -v colab >/dev/null || { echo "colab CLI not found (uv tool install google-colab-cli)" >&2; exit 1; }
+[ -f "$KEY" ] || { echo "SSH key $KEY not found (set KEY=...)" >&2; exit 1; }
+
+ACCEL=""
+[ "$GPU" = none ] || ACCEL="--gpu $GPU"
+CONTROL="${TMPDIR:-/tmp}/run_t4-${SESSION}.sock"  # shared with ./run_t4
+HOST="root@colab-$SESSION"
+SSH=(ssh -i "$KEY"
+  -o "ProxyCommand=colab ssh --proxy-mode -s $SESSION $ACCEL -i $KEY"
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+  -o ServerAliveInterval=15 -o ServerAliveCountMax=4
+  -o ControlMaster=auto -o "ControlPath=$CONTROL" -o ControlPersist=10m)
+
+exists() { ! colab status -s "$SESSION" 2>&1 | grep -q "not found"; }
+
+create() {
+  if exists; then
+    echo "==> session '$SESSION' is running" >&2
+    return
+  fi
+  echo "==> creating Colab session '$SESSION' ($([ "$GPU" = none ] && echo CPU || echo "$GPU"))..." >&2
+  local out
+  if ! out=$(colab new -s "$SESSION" $ACCEL 2>&1); then
+    if grep -q "Service Unavailable" <<<"$out"; then
+      echo "Colab has no $GPU for this account right now (free GPU quota used up, or no capacity)." >&2
+      echo "Try again later, buy compute units (colab pay), or use GPU=none for a CPU runtime." >&2
+    else
+      echo "$out" | tail -5 >&2
+    fi
+    exit 1
+  fi
+}
+
+shell() {
+  if [ $# -eq 0 ]; then
+    "${SSH[@]}" -t "$HOST" 'cd /content && exec bash -l'
+  else
+    "${SSH[@]}" "$HOST" "$@"
+  fi
+}
+
+case "${1:-}" in
+  "" )
+    create
+    shell
+    ;;
+  new|create )
+    create
+    shell 'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo "no GPU (CPU runtime)"' \
+      | sed 's/^/    gpu: /'
+    ;;
+  ssh|shell )
+    shift
+    create
+    shell "$@"
+    ;;
+  status )
+    colab status -s "$SESSION"
+    colab usage 2>&1 | tail -3
+    ;;
+  stop|rm )
+    exists || { echo "no session '$SESSION'"; exit 0; }
+    read -r -p "Stop Colab session '$SESSION'? Files on the VM will be lost. [y/N] " ok
+    [ "$ok" = y ] || [ "$ok" = Y ] || exit 0
+    ssh -o "ControlPath=$CONTROL" -O exit "$HOST" 2>/dev/null || true
+    colab stop -s "$SESSION"
+    ;;
+  -h|--help|help )
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  * )
+    echo "unknown command '$1' (try: new, ssh, status, stop)" >&2
+    exit 1
+    ;;
+esac

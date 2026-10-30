@@ -101,6 +101,22 @@ Options: `SESSION=`, `GPU=`, `KEY=`, `LOCAL_PORT=`, `REMOTE_PORT=`, `REMOTE_DIR=
 connection per runtime, so `colab ssh` to the same session can't connect while `run_t4` runs; use the in-page
 terminal instead.
 
+### Just a Colab GPU shell
+
+`colab_t4` creates and uses the same Colab runtime without the notebook:
+
+```sh
+./colab_t4                # create the T4 runtime if needed and open a shell in /content
+./colab_t4 ssh nvidia-smi # run a command on it
+./colab_t4 new            # create it and print its GPU
+./colab_t4 status         # session status and compute-unit balance
+./colab_t4 stop           # stop the runtime (asks first)
+```
+
+It shares `run_t4`'s SSH connection, so both work at the same time. `GPU=L4`, `GPU=A100` etc. pick another
+accelerator, `GPU=none` a CPU runtime. If Colab has no GPU for the account (free quota used up), it says so instead of
+hanging.
+
 ## How it works
 
 | File | Role |
