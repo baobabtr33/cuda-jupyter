@@ -110,8 +110,9 @@ class Recorder(TorchDispatchMode):
         ev.setdefault("node", None)
         self.events.append(ev)
 
-    def add_file(self, name, lang, code, launch_line=0):
-        self.files.append({"name": name, "lang": lang, "code": code, "launch_line": launch_line})
+    def add_file(self, name, lang, code, launch_line=0, launch=None):
+        self.files.append({"name": name, "lang": lang, "code": code, "launch_line": launch_line,
+                           "launch": launch})
 
     # -- tensors -------------------------------------------------------------
     def _storage_key(self, t):

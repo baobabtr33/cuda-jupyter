@@ -477,10 +477,47 @@ def _install_numba():
                 head = (f"// Numba CUDA kernel `{name}` compiled to PTX by NVVM\n"
                         f"// signature: {sig}\n// launch: {name}[{_dim(griddim)}, {_dim(blockdim)}]"
                         f"  (grid, block)   from L{line}\n//\n" + _comment_block(_py_source(self.py_func)) + "\n\n")
-                rec.add_file(f"{name}.ptx", "ptx", head + ptx, launch_line=line)
+                rec.add_file(f"{name}.ptx", "ptx", head + ptx, launch_line=line,
+                             launch=_numba_launch(self, name, griddim, blockdim, sharedmem))
         return res
 
     nd.CUDADispatcher.call = call
+
+
+def _per_sig(value):
+    return list(value.values())[-1] if isinstance(value, dict) and value else value
+
+
+def _numba_launch(disp, name, griddim, blockdim, sharedmem):
+    def d3(d):
+        d = [int(x) for x in (d if isinstance(d, (tuple, list)) else (d,)) if x is not None]
+        return (d + [1, 1, 1])[:3]
+    regs = smem = None
+    try:
+        regs = int(_per_sig(disp.get_regs_per_thread()))
+        smem = int(_per_sig(disp.get_shared_mem_per_block()))
+    except Exception:
+        pass
+    return {"kernel": name, "grid": d3(griddim), "block": d3(blockdim), "repeat": 1, "op": "numba.cuda.jit",
+            "smem": (smem or 0) + int(sharedmem or 0), "regs": regs, "regs_src": "numba" if regs else ""}
+
+
+def _triton_launch(fn, kernel, name, grid, args, kwargs):
+    meta = getattr(kernel, "metadata", None)
+    warps = int(getattr(meta, "num_warps", 4) or 4)
+    try:
+        if callable(grid):
+            bound = dict(zip(fn.arg_names, args))
+            bound.update(kwargs)
+            grid = grid(bound)
+        g = [int(x) for x in (grid if isinstance(grid, (tuple, list)) else (grid,))]
+    except Exception:
+        g = [1]
+    regs = getattr(kernel, "n_regs", None)
+    return {"kernel": name, "grid": (g + [1, 1, 1])[:3], "block": [warps * 32, 1, 1], "repeat": 1,
+            "op": "triton.jit", "smem": int(getattr(meta, "shared", 0) or 0),
+            "regs": int(regs) if isinstance(regs, int) and regs > 0 else None,
+            "regs_src": "triton" if isinstance(regs, int) and regs > 0 else ""}
 
 
 def _dim(d):
@@ -514,7 +551,8 @@ def _install_triton():
                 head = (f"// Triton kernel `{name}` lowered Triton IR -> TTGIR -> LLVM -> PTX\n"
                         f"// launch: {self.fn.__name__}[{g}]  num_warps={warps}  from L{line}\n//\n"
                         + _comment_block(_py_source(self.fn)) + "\n\n")
-                rec.add_file(f"{name}.ptx", "ptx", head + ptx, launch_line=line)
+                rec.add_file(f"{name}.ptx", "ptx", head + ptx, launch_line=line,
+                             launch=_triton_launch(self, kernel, name, grid, args, kwargs))
         return kernel
 
     tj.JITFunction.run = run

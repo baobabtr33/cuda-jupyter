@@ -8,6 +8,7 @@ complete. Every emitted line remembers the Python line that caused it, which
 the UI uses to cross-highlight the two panes.
 """
 import math
+import re
 from collections import OrderedDict
 
 THREADS = 256
@@ -69,6 +70,34 @@ def is_contig(t):
 
 def cdiv(a, b):
     return (a + b - 1) // b
+
+
+def dim3(v):
+    """Launch dimension (int or "dim3(x, y, z)" text) as [x, y, z]."""
+    if isinstance(v, int):
+        return [v, 1, 1]
+    nums = [int(x) for x in re.findall(r"\d+", str(v).replace("dim3", ""))]
+    return (nums + [1, 1, 1])[:3]
+
+
+_SMEM_ELEM = {"float": 4, "double": 8, "int": 4, "int64_t": 8, "int32_t": 4, "__half": 2, "__nv_bfloat16": 2,
+              "T": 4, "bool": 1, "uint8_t": 1, "int8_t": 1, "int16_t": 2}
+
+
+def static_smem(lines, consts=None):
+    """Bytes of static __shared__ memory declared in a kernel's source lines."""
+    consts = dict(TILE=16, **(consts or {}))
+    total = 0
+    for ln in lines:
+        m = re.search(r"__shared__\s+([\w:]+)\s+\w+((?:\[[^\]]+\])+)", ln)
+        if not m:
+            continue
+        n = 1
+        for d in re.findall(r"\[([^\]]+)\]", m.group(2)):
+            d = d.strip()
+            n *= int(d) if d.isdigit() else consts.get(d, 1)
+        total += n * _SMEM_ELEM.get(m.group(1), 4)
+    return total
 
 
 def next_pow2(n, lo=32, hi=1024):
@@ -435,6 +464,9 @@ class Gen:
         self.cur_line = 0
         self.stats = {"ops": 0, "kernels": 0, "launches": 0, "views": 0, "fallback": 0, "memcpy": 0}
         self.trace = []
+        self.launches = []  # structured launch records for the GPU view
+        self.cur_count = 1
+        self.cur_op = ""
 
     # -- output helpers --------------------------------------------------------
     def emit(self, text=""):
@@ -443,6 +475,9 @@ class Gen:
 
     def launch(self, kname, grid, block, args, comment=None):
         self.stats["launches"] += 1
+        self.launches.append({"kernel": kname, "grid": dim3(grid), "block": dim3(block), "py_line": self.cur_line,
+                              "body_idx": len(self.body) + (1 if comment else 0), "repeat": self.cur_count,
+                              "op": self.cur_op})
         head = f"{kname}<<<{grid}, {block}>>>("
         one = head + ", ".join(args) + ");"
         if comment:
@@ -1536,6 +1571,7 @@ class Gen:
                     if count > 1:
                         h += f"   (repeated x{count})"
                     self.emit(h)
+                self.cur_count, self.cur_op = count, op_label(ev)
                 self.handle(ev, count)
                 emitted += 1
             if clipped:
@@ -1633,12 +1669,13 @@ def generate(events, storage_meta, names, modules, source, cell, seed=0, truncat
              files=(), filename=""):
     files_out = []
     stats = {"ops": 0, "kernels": 0, "launches": 0, "views": 0, "fallback": 0, "memcpy": 0}
-    ops = []
+    ops, launches = [], []
     if events:
         main = generate_main(events, storage_meta, names, modules, source, cell, seed, truncated, arch)
         files_out.append(main["file"])
         stats.update(main["stats"])
         ops = main["ops"]
+        launches = main["launches"]
     for f in files:
         if f["lang"] == "ptx":
             import frameworks
@@ -1649,8 +1686,11 @@ def generate(events, storage_meta, names, modules, source, cell, seed=0, truncat
             lm = [f["launch_line"]] * (f["code"].count("\n") + 1)
         files_out.append({"name": f["name"], "lang": f["lang"], "code": f["code"], "line_map": lm})
         stats["kernels"] += 1
+        if f.get("launch"):
+            line = next((i + 1 for i, ln in enumerate(f["code"].split("\n")) if ln.startswith("// launch:")), 1)
+            launches.append(dict(f["launch"], file=f["name"], line=line, py_line=f["launch_line"]))
     stats["files"] = len(files_out)
-    return {"files": files_out, "ops": ops, "stats": stats}
+    return {"files": files_out, "ops": ops, "stats": stats, "launches": launches}
 
 
 def generate_main(events, storage_meta, names, modules, source, cell, seed=0, truncated=False, arch="sm_80"):
@@ -1738,6 +1778,7 @@ def generate_main(events, storage_meta, names, modules, source, cell, seed=0, tr
             m = storage_meta[s]
             decl = f"{ctype(m['dtype'])}* {nm} = nullptr;".ljust(width)
             add(f"    {decl}  CUDA_CHECK(cudaMalloc(&{nm}, {max(m['nbytes'], 1)}));  // {human_bytes(m['nbytes'])}")
+    body_start = len(out)
     for text, py in g.body:
         add(text, py)
     add("")
@@ -1761,9 +1802,18 @@ def generate_main(events, storage_meta, names, modules, source, cell, seed=0, tr
     add("    return 0;")
     add("}")
 
+    smem = {}
+    for name, (lines, _) in g.kernels.items():
+        smem[name] = static_smem(lines) + (128 if any("block_reduce" in ln for ln in lines) else 0)
+    launches = []
+    for la in g.launches:
+        la = dict(la, file=f"cell{cell}.cu", line=body_start + la.pop("body_idx") + 1,
+                  smem=smem.get(la["kernel"], 0), regs=None, regs_src="")
+        launches.append(la)
     return {
         "file": {"name": f"cell{cell}.cu", "lang": "cpp", "code": "\n".join(t for t, _ in out),
                  "line_map": [ln for _, ln in out]},
         "ops": g.trace,
+        "launches": launches,
         "stats": dict(st, clipped=clipped, truncated=truncated),
     }

@@ -16,6 +16,11 @@ generated file right away.
 - **CUDA pane** (right): appears after a cell runs, with one tab per generated file (`cellN.cu`, `*.ptx`, `*.cu`) and
   an *Op trace* tab listing every recorded op. Hover a CUDA line to highlight the Python line that produced it; click
   to jump there. Moving the cursor in a cell highlights its CUDA. Copy or download any file.
+- **GPU tab**: what a kernel launch does on the actual device. The grid is dealt to the SMs in waves (idle SMs and
+  tail effects show up), then one SM is opened up: warp schedulers with the resident warps of each block, FP32/INT32
+  cores and tensor cores, register file and shared memory usage, the registers one thread owns, and an occupancy
+  breakdown showing which resource limits blocks per SM. Register counts come from `ptxas` (via `nvcc`), Numba or
+  Triton; without a GPU a Tesla T4 is shown with estimated counts.
 - **Terminal** (bottom): a real shell (`$SHELL`), with the virtualenv and `nvcc` on `PATH`.
 
 | Framework | What the pane shows |
@@ -34,6 +39,8 @@ generated file right away.
 | Numba | TensorFlow op trace |
 |---|---|
 | ![Numba PTX](docs/screenshots/numba-ptx.png) | ![TensorFlow op trace](docs/screenshots/tensorflow-trace.png) |
+
+![GPU tab: inside one SM](docs/screenshots/gpu-sm.png)
 
 ## Quick start
 
@@ -78,6 +85,9 @@ use the in-page terminal instead.
 - `frameworks.py`: hooks for the other frameworks, installed when they are imported. JAX `Primitive.bind` and
   TensorFlow op callbacks are mapped onto the same op events as ATen; Numba, Triton and CuPy compile hooks capture
   the generated PTX/CUDA and map it back to cell lines via debug info.
+- `static/gpu.js`: the GPU tab. Device limits come from `torch.cuda.get_device_properties` plus a per-architecture
+  table (cores and schedulers per SM); occupancy follows NVIDIA's calculator (register allocation per warp, shared
+  memory granularity, block and warp slots).
 - `cudagen.py`: turns the op trace into a `.cu` file from hand-written templates:
 
 | Ops | CUDA |
@@ -99,6 +109,8 @@ first iteration's buffers. The generated files compile with `nvcc`.
   actually runs (cuBLAS/cuDNN, XLA fusions, vectorised kernels). Numerical equivalence is not guaranteed.
 - JAX and TensorFlow are traced eagerly (`jax.disable_jit`, `tf.config.run_functions_eagerly`), so cells run slower
   and you see unfused ops.
+- The GPU tab is a model: blocks are dealt round-robin in fixed waves, while real hardware schedules blocks
+  dynamically. CuPy launches are not shown there.
 - CuPy caches compiled kernels, so only kernels compiled during a cell are shown.
 - No interrupt button (restart the server to stop a runaway cell); outputs are text only (no plots).
 

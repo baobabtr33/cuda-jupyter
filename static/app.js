@@ -398,6 +398,8 @@
   // ------------------------------------------------------------------ CUDA pane
   const cudaCode = $("#cuda-code");
   const cudaTrace = $("#cuda-trace");
+  const cudaGpu = $("#cuda-gpu");
+  const VIEW_TABS = ["trace", "gpu"];  // tabs that are not files
   const cudaEmpty = $("#cuda-empty");
   let revealJob = 0;
 
@@ -409,8 +411,10 @@
     nb.tracingCell = cell;
     nb.cudaCell = null;
     nb.cells.forEach(renderBadge);
+    GpuView.stop();
     cudaCode.hidden = true;
     cudaTrace.hidden = true;
+    cudaGpu.hidden = true;
     cudaEmpty.hidden = false;
     cudaEmpty.classList.add("tracing");
     cudaEmpty.innerHTML = '<div class="empty-mark">&lt;&lt;&lt; &gt;&gt;&gt;</div><p>Running PyTorch and tracing ATen ops...</p>';
@@ -424,8 +428,10 @@
     nb.cells.forEach(renderBadge);
     cudaEmpty.classList.remove("tracing");
     if (!nb.cudaCell) {
+      GpuView.stop();
       cudaCode.hidden = true;
       cudaTrace.hidden = true;
+      cudaGpu.hidden = true;
       cudaEmpty.hidden = false;
       cudaEmpty.innerHTML = cell
         ? '<div class="empty-mark">&lt;&lt;&lt; &gt;&gt;&gt;</div><p>This cell dispatched no tensor ops,</p><p class="muted">so there is nothing to translate to CUDA.</p>'
@@ -438,9 +444,9 @@
     const cuda = cell.cuda;
     $("#cuda-cell-label").textContent = cellLabel(cell);
     renderStats(cuda.stats || {});
-    if (nb.cudaTab !== "trace" || !(cuda.ops || []).length) nb.cudaTab = 0;
+    if (!(nb.cudaTab === "trace" && (cuda.ops || []).length) && !(nb.cudaTab === "gpu" && (cuda.launches || []).length)) nb.cudaTab = 0;
     renderFileTabs(cuda);
-    if (nb.cudaTab !== "trace") renderCode(cuda.files[nb.cudaTab], animate);
+    if (!VIEW_TABS.includes(nb.cudaTab)) renderCode(cuda.files[nb.cudaTab], animate);
     renderTrace(cuda);
     applyTab();
   }
@@ -459,12 +465,13 @@
       box.append(b);
     });
     $("#trace-tab").hidden = !cuda || !(cuda.ops || []).length;
+    $("#gpu-tab").hidden = !cuda || !(cuda.launches || []).length;
   }
 
   function selectTab(tab) {
     nb.cudaTab = tab;
     $("#cuda-body").scrollTop = 0;
-    if (tab !== "trace" && nb.cudaCell) renderCode(nb.cudaCell.cuda.files[tab], false);
+    if (!VIEW_TABS.includes(tab) && nb.cudaCell) renderCode(nb.cudaCell.cuda.files[tab], false);
     applyTab();
   }
 
@@ -579,14 +586,33 @@
   function applyTab() {
     document.querySelectorAll("#cuda-pane .pane-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === String(nb.cudaTab)));
     if (!nb.cudaCell) return;
-    cudaCode.hidden = nb.cudaTab === "trace";
+    cudaCode.hidden = VIEW_TABS.includes(nb.cudaTab);
     cudaTrace.hidden = nb.cudaTab !== "trace";
+    cudaGpu.hidden = nb.cudaTab !== "gpu";
+    if (nb.cudaTab === "gpu") {
+      GpuView.render(cudaGpu, nb.cudaCell.cuda, nb.gpu, { nvcc: nb.nvcc, onGoto: gotoLaunch });
+    } else {
+      GpuView.stop();
+    }
   }
 
   function currentFile() {
     const c = nb.cudaCell?.cuda;
     if (!c) return null;
-    return c.files[nb.cudaTab === "trace" ? 0 : nb.cudaTab] || c.files[0];
+    return c.files[VIEW_TABS.includes(nb.cudaTab) ? 0 : nb.cudaTab] || c.files[0];
+  }
+
+  // GPU tab -> the launch line in the generated file
+  function gotoLaunch(name, line) {
+    const files = nb.cudaCell?.cuda.files || [];
+    const i = files.findIndex((f) => f.name === name);
+    if (i < 0) return;
+    selectTab(i);
+    const row = cudaCode.children[line - 1];
+    if (!row) return;
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("flash");
+    setTimeout(() => row.classList.remove("flash"), 1600);
   }
 
   // cross-highlighting between CUDA lines and Python lines
@@ -656,6 +682,7 @@
   });
 
   $("#trace-tab").addEventListener("click", () => selectTab("trace"));
+  $("#gpu-tab").addEventListener("click", () => selectTab("gpu"));
 
   $("#cuda-copy").addEventListener("click", async () => {
     if (!nb.cudaCell) return;
@@ -1043,6 +1070,8 @@
       const info = await fetch("/api/info").then((r) => r.json());
       $("#env_info").textContent = `torch ${info.torch} · ${info.device}`;
       $("#term-title").textContent = `${info.shell} · ${info.device}`;
+      nb.gpu = info.gpu;
+      nb.nvcc = info.nvcc;
     } catch { /* server info optional */ }
     const data = await fetch("/api/notebook").then((r) => r.json());
     loadIpynb(data);

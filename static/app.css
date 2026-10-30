@@ -518,3 +518,77 @@ body.no-terminal #terminal-pane, body.no-terminal #hsplit { display: none; }
 .modal-body { padding: 12px 16px 16px; overflow: auto; line-height: 1.5; }
 .shortcuts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
 .shortcuts h4 { grid-column: 1 / -1; margin: 10px 0 2px; }
+
+/* GPU tab */
+.cl.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: rgba(241, 199, 107, 0.35); } to { background: transparent; } }
+#cuda-gpu { container-type: inline-size; padding: 12px 16px 48px; color: var(--dark-text); font: 12.5px/1.5 var(--ui); max-width: 980px; }
+#cuda-gpu .muted { color: var(--dark-muted); }
+.gpu-device { padding: 10px 12px; border: 1px solid var(--dark-border); border-radius: 6px; background: var(--dark-bar); }
+.gpu-device-name { font-size: 14px; margin-bottom: 6px; }
+.gpu-device-name b { color: #fff; }
+.gpu-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 11.5px var(--mono); color: #b9b9b9; }
+.gpu-fact b { color: var(--accent); font-weight: 600; }
+.gpu-note { margin: 8px 0 0; color: var(--dark-muted); font-size: 12px; }
+.gpu-note.warn { color: #e5c07b; }
+.gpu-section { margin-top: 18px; }
+.gpu-section h4 { margin: 0 0 4px; font-size: 13px; color: #fff; font-weight: 600; }
+.gpu-sub { margin: 0 0 8px; color: #b9b9b9; max-width: 72ch; }
+.gpu-callout { margin: 0 0 8px; padding: 4px 8px; border-left: 3px solid #e5c07b; background: rgba(229, 192, 123, 0.08); color: #e5c07b; max-width: 72ch; }
+.gpu-foot { margin: 6px 0 0; color: var(--dark-muted); font-size: 11.5px; }
+
+.gpu-launches { max-height: 168px; overflow: auto; border: 1px solid var(--dark-border); border-radius: 4px; font: 12px/1.4 var(--mono); }
+.gpu-launch { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) auto 2.6em; gap: 8px; padding: 3px 8px; cursor: pointer; }
+.gpu-launch:hover { background: #2a2d2e; }
+.gpu-launch.active { background: rgba(118, 185, 0, 0.16); box-shadow: inset 3px 0 0 var(--accent); }
+.gpu-launch.linked { background: var(--link-hl); }
+.gl-line { color: var(--dark-muted); }
+.gl-name { color: #f1c76b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gl-dims { color: #9cdcfe; }
+.gl-count { color: var(--dark-muted); text-align: right; }
+
+.gpu-ctrl { display: flex; align-items: center; gap: 6px; margin: 4px 0 8px; }
+.gpu-ctrl .pane-btn:disabled { opacity: 0.35; cursor: default; }
+.gpu-wave { font: 11.5px var(--mono); color: #c8c8c8; min-width: 20em; text-align: center; }
+.gpu-chip { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--dark-border); border-radius: 6px; background: #181818; }
+.sm-tile { padding: 3px 4px 4px; border: 1px solid #3a3a3a; border-radius: 3px; background: #232323; min-width: 0; transition: opacity 0.2s; }
+.sm-tile.idle { opacity: 0.35; }
+.sm-tile.focus { border-color: var(--accent); }
+.sm-label { display: block; font: 9.5px var(--mono); color: var(--dark-muted); white-space: nowrap; }
+.sm-slots { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 2px; }
+.sm-slots i { width: 7px; height: 7px; border-radius: 1px; background: #383838; transition: background 0.2s; }
+.gpu-mem { display: flex; gap: 4px; margin-top: 4px; font: 11px var(--mono); color: var(--dark-muted); }
+.gpu-mem span { flex: 1; padding: 3px 8px; border: 1px dashed #444; border-radius: 3px; text-align: center; }
+
+.gpu-sm { display: grid; grid-template-columns: repeat(var(--parts, 4), minmax(0, 1fr)); gap: 6px; padding: 8px; border: 1px solid var(--accent); border-radius: 6px; background: #181818; margin-bottom: 8px; }
+.sm-part { padding: 6px; border: 1px solid #3a3a3a; border-radius: 4px; background: #202020; min-width: 0; }
+.sm-part-title { font: 600 11px var(--mono); color: #c8c8c8; margin-bottom: 4px; }
+.warp-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; margin-bottom: 6px; }
+.warp-slot { position: relative; height: 18px; border: 1px dashed #3a3a3a; border-radius: 2px; overflow: hidden; }
+.warp-slot.on { border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.warp-slot span { position: relative; z-index: 1; display: block; padding: 0 4px; font: 10px/16px var(--mono); color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.warp-slot .lanes { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--c); }
+.warp-slot.issue { background: color-mix(in srgb, var(--c) 55%, transparent); box-shadow: 0 0 0 1px var(--c); }
+.sm-units { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.unit-label { display: block; font: 10px var(--mono); color: var(--dark-muted); }
+.unit-cells { display: flex; flex-wrap: wrap; gap: 2px; }
+.unit-cells i { width: 6px; height: 8px; border-radius: 1px; background: #3d4a2a; }
+.unit-cells.int32 i { background: #2c3e4f; }
+.unit-cells.tc i { width: 22px; height: 12px; background: #4a3550; }
+.unit-cells.fp32.busy i { background: var(--accent); }
+.gpu-bar { margin-top: 4px; }
+.gpu-bar-head { display: flex; justify-content: space-between; gap: 8px; font: 10.5px var(--mono); color: #c8c8c8; }
+.gpu-bar-head span:last-child { text-align: right; }
+.gpu-bar-track { height: 6px; margin-top: 2px; border-radius: 3px; background: #333; overflow: hidden; }
+.gpu-bar-track i { display: block; height: 100%; background: var(--accent); }
+.gpu-thread { margin-top: 10px; padding: 8px; border: 1px solid var(--dark-border); border-radius: 4px; }
+.gpu-thread-title { font: 600 11.5px var(--mono); color: #c8c8c8; margin-bottom: 4px; }
+.reg-cells { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.reg-cells i { width: 10px; height: 10px; border-radius: 2px; background: #4fc1ff; opacity: 0.8; }
+.gpu-occ { border-collapse: collapse; font: 12px/1.6 var(--mono); margin-bottom: 6px; }
+.gpu-occ td { padding: 1px 12px 1px 0; vertical-align: top; }
+.gpu-occ td.num { text-align: right; color: #fff; }
+.gpu-occ tr.limit td:first-child, .gpu-occ tr.limit td.num { color: #e5c07b; font-weight: 600; }
+.gpu-occ tr.limit td:first-child::before { content: "▸ "; }
+@media (prefers-reduced-motion: reduce) { .sm-slots i, .sm-tile { transition: none; } }
+@container (max-width: 620px) { .gpu-sm { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
